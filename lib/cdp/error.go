@@ -1,7 +1,9 @@
 package cdp
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 )
 
 // Error of the Response.
@@ -9,6 +11,38 @@ type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    string `json:"data"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler to handle error codes as either int or string.
+func (e *Error) UnmarshalJSON(data []byte) error {
+	// decode into an auxiliary struct to ambiguously typed Code field
+	type errorAlias Error
+	aux := &struct {
+		Code json.RawMessage `json:"code"`
+		*errorAlias
+	}{
+		errorAlias: (*errorAlias)(e),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	// check whether the code field has at least one character
+	if len(aux.Code) > 0 {
+		var intCode int
+		if err := json.Unmarshal(aux.Code, &intCode); err == nil {
+			e.Code = intCode
+		} else {
+			var stringCode string
+			if err := json.Unmarshal(aux.Code, &stringCode); err == nil {
+				if parsed, err := strconv.Atoi(stringCode); err == nil {
+					e.Code = parsed
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // Error stdlib interface.
